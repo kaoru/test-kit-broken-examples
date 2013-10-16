@@ -1,0 +1,10 @@
+Sooo here's what we have...
+
+Test::Kit + Test::Aggregate is totally broken
+
+Test::Kit + Test::Aggregate::Nested seems to work if you only use Test::More,
+but not if you try to put Test::Exception or similar into the mix. Seems to be
+because the lives_ok() subroutine isn't exported into all the necessary
+packages?
+
+Please help! :-(

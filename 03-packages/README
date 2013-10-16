@@ -1,0 +1,6 @@
+Sooo here's what we have...
+
+If you try to use a Test::Kit-y module like MyTest in another package it
+doesn't work.
+
+Is the package name "main" special to Test::Kit somehow?
