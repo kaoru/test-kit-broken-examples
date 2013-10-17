@@ -20,8 +20,6 @@ Version 0.100
 our $VERSION = '0.101';
 $VERSION = eval $VERSION;
 
-print "[kao] HACKED UP Test::Kit\n";
-
 =head1 SYNOPSIS
 
     package My::Custom::Tests;
@@ -105,7 +103,7 @@ which conflicting function.  There are two ways of dealing with this: renaming
 and excluding.  To do this, add a hashref after the module name with keys
 'exclude', 'rename', or both.
 
-    use Test::Most 
+    use Test::Most
         'Test::Something' => {
             # or a scalar for just one
             exclude => [qw/ list of excluded functions/],
@@ -124,9 +122,7 @@ my %FUNCTION;
 
 sub import {
     my $class    = shift;
-    my $callpack = $class->_get_callpack(0);
-
-    print "[kao] [0] [${class}::import]\n";
+    my $callpack = $class->_get_callpack();
 
     my $basic_functions = namespace::clean->get_functions($class);
 
@@ -136,7 +132,6 @@ sub import {
 
     foreach my $package ( keys %$packages ) {
         my $internal_package = "Test::Kit::_INTERNAL_::$package";
-        print "[kao] [2] package $internal_package; use $package;\n";
         eval "package $internal_package; use $package;";
         if ( my $error = $@ ) {
             Carp::croak("Cannot require $package:  $error");
@@ -160,7 +155,6 @@ sub import {
 
 sub _get_callpack {
     my $class = shift;
-    my $n = shift;
 
     my $callpack;
 
@@ -177,28 +171,23 @@ sub _get_callpack {
     # ... and we want to get the package name "MyTest" out of there.
     # So, let's look for the first occurrence of BEGIN or something!
 
-    use Data::Dumper ();
-    #print "[kao] [x] ", Data::Dumper::Dumper([ map { [ caller($_) ] } 1 .. 10 ]);
-
     my @begins = grep { m/::BEGIN$/ }
                  map  { (caller($_))[3] }
                  1 .. 10;
 
-    if ($begins[$n] && $begins[$n] =~ m/^ (.+) ::BEGIN $/msx) {
+    if ($begins[0] && $begins[0] =~ m/^ (.+) ::BEGIN $/msx) {
         $callpack = $1;
     }
     else {
         die "Unable to determine callpack for some reason...";
     }
 
-    #print "[kao] [y] $class, $n, $callpack\n";
-
     return $callpack;
 }
 
 sub _setup_import {
     my ( $class, $features ) = @_;
-    my $callpack = $class->_get_callpack(0);
+    my $callpack = $class->_get_callpack();
     my $import   = "$callpack\::import";
     my $isa      = "$callpack\::ISA";
     my $export   = "$callpack\::EXPORT";
@@ -210,11 +199,11 @@ sub _setup_import {
         unshift @$isa => 'Test::Kit::Features';
         *$import = sub {
             my ( $class, @args ) = @_;
-            print "[kao] [10] [${class}::import]\n";
+
             @args = $class->BUILD(@args) if $class->can('BUILD');
             @args = $class->_setup_features( $features, @args );
             @_ = ( $class, @args );
-            print "[kao] [11] [$class, @args]\n";
+
             no strict 'refs';
             @$export = keys %{ namespace::clean->get_functions($class) };
 
@@ -224,7 +213,6 @@ sub _setup_import {
             push @$export, '$TODO';
             # END HACK!
 
-            print "[kao] [12] [$class, @$export]\n";
             goto &Test::Builder::Module::import;
         };
     }
@@ -312,7 +300,6 @@ sub _export_to {
     my ( $class, $target ) = @_;
 
     while ( my ( $function, $definition ) = each %{ $FUNCTION{$target} } ) {
-        print "[kao] [3] $target\::$function = $definition->{glob}\n";
         my $target_function = "$target\::$function";
         no strict 'refs';
         *$target_function = $definition->{glob};
