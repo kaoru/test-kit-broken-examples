@@ -2,7 +2,6 @@ package Test::Kit;
 
 use warnings;
 use strict;
-use Data::Dumper ();
 use Carp ();
 use namespace::clean;
 
@@ -20,6 +19,8 @@ Version 0.100
 
 our $VERSION = '0.101';
 $VERSION = eval $VERSION;
+
+print "[kao] HACKED UP Test::Kit\n";
 
 =head1 SYNOPSIS
 
@@ -123,7 +124,9 @@ my %FUNCTION;
 
 sub import {
     my $class    = shift;
-    my $callpack = $class->_get_callpack;
+    my $callpack = $class->_get_callpack(0);
+
+    print "[kao] [0] [${class}::import]\n";
 
     my $basic_functions = namespace::clean->get_functions($class);
 
@@ -133,6 +136,7 @@ sub import {
 
     foreach my $package ( keys %$packages ) {
         my $internal_package = "Test::Kit::_INTERNAL_::$package";
+        print "[kao] [2] package $internal_package; use $package;\n";
         eval "package $internal_package; use $package;";
         if ( my $error = $@ ) {
             Carp::croak("Cannot require $package:  $error");
@@ -156,6 +160,7 @@ sub import {
 
 sub _get_callpack {
     my $class = shift;
+    my $n = shift;
 
     my $callpack;
 
@@ -169,29 +174,34 @@ sub _get_callpack {
     # 5. main::BEGIN
     # 6. (eval)
     #
-    # ... and we want to get the package name "main" out of there.
-    # So, let's look for the second occurrence of BEGIN or something!
+    # ... and we want to get the package name "MyTest" out of there.
+    # So, let's look for the first occurrence of BEGIN or something!
+
+    use Data::Dumper ();
+    #print "[kao] [x] ", Data::Dumper::Dumper([ map { [ caller($_) ] } 1 .. 10 ]);
 
     my @begins = grep { m/::BEGIN$/ }
                  map  { (caller($_))[3] }
                  1 .. 10;
 
-    if ($begins[1] && $begins[1] =~ m/^ (.+) ::BEGIN $/msx) {
+    if ($begins[$n] && $begins[$n] =~ m/^ (.+) ::BEGIN $/msx) {
         $callpack = $1;
     }
     else {
-        warn "Unable to determine callpack for some reason... defaulting to 'main'";
-        $callpack = "main";
+        die "Unable to determine callpack for some reason...";
     }
+
+    #print "[kao] [y] $class, $n, $callpack\n";
 
     return $callpack;
 }
 
 sub _setup_import {
     my ( $class, $features ) = @_;
-    my $callpack = caller(1);              # this is the composed test package
+    my $callpack = $class->_get_callpack(0);
     my $import   = "$callpack\::import";
     my $isa      = "$callpack\::ISA";
+    my $export   = "$callpack\::EXPORT";
     no strict 'refs';
     if ( defined &$import ) {
         Carp::croak("Class $callpack must not define an &import method");
@@ -200,9 +210,21 @@ sub _setup_import {
         unshift @$isa => 'Test::Kit::Features';
         *$import = sub {
             my ( $class, @args ) = @_;
+            print "[kao] [10] [${class}::import]\n";
             @args = $class->BUILD(@args) if $class->can('BUILD');
             @args = $class->_setup_features( $features, @args );
             @_ = ( $class, @args );
+            print "[kao] [11] [$class, @args]\n";
+            no strict 'refs';
+            @$export = keys %{ namespace::clean->get_functions($class) };
+
+            # HACK!
+            @$export = grep { $_ ne 'import' } @$export;
+            @$export = grep { $_ ne 'BEGIN'  } @$export;
+            push @$export, '$TODO';
+            # END HACK!
+
+            print "[kao] [12] [$class, @$export]\n";
             goto &Test::Builder::Module::import;
         };
     }
@@ -290,6 +312,7 @@ sub _export_to {
     my ( $class, $target ) = @_;
 
     while ( my ( $function, $definition ) = each %{ $FUNCTION{$target} } ) {
+        print "[kao] [3] $target\::$function = $definition->{glob}\n";
         my $target_function = "$target\::$function";
         no strict 'refs';
         *$target_function = $definition->{glob};
