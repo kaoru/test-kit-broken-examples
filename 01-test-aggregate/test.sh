@@ -2,20 +2,16 @@
 
 echo "--- GOOD + Test::Aggregate = BAD ---";
 
-prove aggregate.t :: t-good &>/dev/null
-echo $?
+prove -l aggregate.t :: t-good
 
 echo "--- GOOD + Test::Aggregate::Nested = GOOD ---";
 
-prove aggregate-nested.t :: t-good &>/dev/null
-echo $?
+prove -l aggregate-nested.t :: t-good
 
 echo "--- BAD + Test::Aggregate = BAD ---";
 
-prove aggregate.t :: t-bad &>/dev/null
-echo $?
+prove -l aggregate.t :: t-bad
 
 echo "--- BAD + Test::Aggregate::NESTED = BAD ---";
 
-prove aggregate-nested.t :: t-bad &>/dev/null
-echo $?
+prove -l aggregate-nested.t :: t-bad
