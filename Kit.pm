@@ -187,7 +187,7 @@ sub _get_callpack {
 
 sub _setup_import {
     my ( $class, $features ) = @_;
-    my $callpack = $class->_get_callpack();
+    my $callpack = caller(1);
     my $import   = "$callpack\::import";
     my $isa      = "$callpack\::ISA";
     my $export   = "$callpack\::EXPORT";
