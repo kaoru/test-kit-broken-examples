@@ -178,9 +178,6 @@ sub _get_callpack {
     if ($begins[0] && $begins[0] =~ m/^ (.+) ::BEGIN $/msx) {
         $callpack = $1;
     }
-    else {
-        die "Unable to determine callpack for some reason...";
-    }
 
     return $callpack;
 }
