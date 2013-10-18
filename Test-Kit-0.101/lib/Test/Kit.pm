@@ -103,7 +103,7 @@ which conflicting function.  There are two ways of dealing with this: renaming
 and excluding.  To do this, add a hashref after the module name with keys
 'exclude', 'rename', or both.
 
-    use Test::Most 
+    use Test::Most
         'Test::Something' => {
             # or a scalar for just one
             exclude => [qw/ list of excluded functions/],
@@ -122,7 +122,7 @@ my %FUNCTION;
 
 sub import {
     my $class    = shift;
-    my $callpack = caller(1);
+    my $callpack = $class->_get_callpack();
 
     my $basic_functions = namespace::clean->get_functions($class);
 
@@ -153,11 +153,44 @@ sub import {
     return 1;
 }
 
+sub _get_callpack {
+    my $class = shift;
+
+    my $callpack;
+
+    # so, as far as I can tell, on Perl 5.14 and 5.16 at least, we have the
+    # following callstack...
+    #
+    # 1. Test::Kit::import,
+    # 2. MyTest::BEGIN
+    # 3. (eval)
+    # 4. (eval)
+    # 5. main::BEGIN
+    # 6. (eval)
+    #
+    # ... and we want to get the package name "MyTest" out of there.
+    # So, let's look for the first occurrence of BEGIN or something!
+
+    my @begins = grep { m/::BEGIN$/ }
+                 map  { (caller($_))[3] }
+                 1 .. 10;
+
+    if ($begins[0] && $begins[0] =~ m/^ (.+) ::BEGIN $/msx) {
+        $callpack = $1;
+    }
+    else {
+        die "Unable to determine callpack for some reason...";
+    }
+
+    return $callpack;
+}
+
 sub _setup_import {
     my ( $class, $features ) = @_;
-    my $callpack = caller(1);              # this is the composed test package
+    my $callpack = $class->_get_callpack();
     my $import   = "$callpack\::import";
     my $isa      = "$callpack\::ISA";
+    my $export   = "$callpack\::EXPORT";
     no strict 'refs';
     if ( defined &$import ) {
         Carp::croak("Class $callpack must not define an &import method");
@@ -166,9 +199,20 @@ sub _setup_import {
         unshift @$isa => 'Test::Kit::Features';
         *$import = sub {
             my ( $class, @args ) = @_;
+
             @args = $class->BUILD(@args) if $class->can('BUILD');
             @args = $class->_setup_features( $features, @args );
             @_ = ( $class, @args );
+
+            no strict 'refs';
+            @$export = keys %{ namespace::clean->get_functions($class) };
+
+            # HACK!
+            @$export = grep { $_ ne 'import' } @$export;
+            @$export = grep { $_ ne 'BEGIN'  } @$export;
+            push @$export, '$TODO';
+            # END HACK!
+
             goto &Test::Builder::Module::import;
         };
     }
