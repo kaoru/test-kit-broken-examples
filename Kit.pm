@@ -5,6 +5,9 @@ use strict;
 use Carp ();
 use namespace::clean;
 
+use Import::Into;
+use Module::Runtime 'use_module';
+
 use Test::Kit::Features;
 
 =head1 NAME
@@ -121,35 +124,19 @@ and excluding.  To do this, add a hashref after the module name with keys
 my %FUNCTION;
 
 sub import {
-    my $class    = shift;
-    my $callpack = $class->_get_callpack();
+    my $class = shift;
 
     my $basic_functions = namespace::clean->get_functions($class);
 
-    # not implementing features yet
     my ( $packages, $features ) = $class->_packages_and_features(@_);
+
+    my $target = caller;
+    foreach my $package ( keys %$packages ) {
+        use_module($package)->import::into($target);
+    }
+
     $class->_setup_import($features);
 
-    foreach my $package ( keys %$packages ) {
-        my $internal_package = "Test::Kit::_INTERNAL_::$package";
-        eval "package $internal_package; use $package;";
-        if ( my $error = $@ ) {
-            Carp::croak("Cannot require $package:  $error");
-        }
-
-        $class->_register_new_functions( $callpack, $basic_functions,
-            $packages->{$package}, $package, $internal_package, );
-    }
-    $class->_validate_functions($callpack);
-    $class->_export_to($callpack);
-
-    {
-
-        # Otherwise, "local $TODO" won't work for caller.
-        no strict 'refs';
-        our $TODO;
-        *{"$callpack\::TODO"} = \$TODO;
-    }
     return 1;
 }
 
