@@ -9,6 +9,8 @@ use namespace::clean;
 use Import::Into;
 use Module::Runtime 'use_module';
 
+use Try::Tiny;
+
 use Test::Kit::Features;
 
 =head1 NAME
@@ -131,11 +133,19 @@ sub import {
 
     my ( $packages, $features ) = $class->_packages_and_features(@_);
 
+    $class->_load_all_packages($packages);
+
     $class->_check_for_conflicts($packages);
 
     my $target = $class->_get_callpack();
     foreach my $package ( keys %$packages ) {
-        use_module($package);
+        my @keys = keys %{ $packages->{$package} || {} };
+        my @bad_keys;
+        for my $key (@keys) {
+            next if grep { $key eq $_ } qw(exclude rename);
+            push @bad_keys, $key;
+        }
+        die "Unknown keys in module definition: @bad_keys" if @bad_keys;
 
         my @exclude = @{ $packages->{$package}{exclude} || [] };
         my %rename = %{ $packages->{$package}{rename} || {} };
@@ -177,6 +187,22 @@ sub import {
     $class->_setup_import($features);
 
     return 1;
+}
+
+sub _load_all_packages {
+    my $class = shift;
+    my $packages = shift;
+
+    for my $pkg (sort keys %{ $packages || {} }) {
+        try {
+            use_module($pkg);
+        }
+        catch {
+            die "Cannot require $pkg";
+        };
+    }
+
+    return;
 }
 
 sub _check_for_conflicts {
