@@ -137,25 +137,41 @@ sub import {
     foreach my $package ( keys %$packages ) {
         use_module($package);
 
-        if ($packages->{$package}{exclude}) {
-            # create a temporary package that doesn't include the excluded
-            # packages, then import that into our target
-            my $tmp_pkg = "Test::Kit::Temp::Excluded::$package";
-            $package->import::into($tmp_pkg);
+        my @exclude = @{ $packages->{$package}{exclude} || [] };
+        my %rename = %{ $packages->{$package}{rename} || {} };
 
-            my $functions_exported_by_pkg = $class->_get_functions_exported_by_package($package);
-            my %excluded = map { $_ => 1 } @{ $packages->{$package}{exclude} };
+        # create a temporary package that contains all the functions including
+        # exclude and rename options, and then then import that into our target
+        my $tmp_pkg = "Test::Kit::Temp::Excluded::$package";
+        $package->import::into($tmp_pkg);
 
-            {
-                no strict 'refs';
-                push @{ "$tmp_pkg\::ISA" }, 'Exporter';
-                @{ "$tmp_pkg\::EXPORT" } = grep { !$excluded{$_} } keys %$functions_exported_by_pkg;
+        my $functions_exported_by_pkg = $class->_get_functions_exported_by_package($package);
+        my %excluded = map { $_ => 1 } @{ $packages->{$package}{exclude} };
+
+        {
+            no strict 'refs';
+            push @{ "$tmp_pkg\::ISA" }, 'Exporter';
+            @{ "$tmp_pkg\::EXPORT" } = (
+                (grep { !$excluded{$_} && !$rename{$_} } keys %$functions_exported_by_pkg),
+                (values %rename)
+            );
+
+            for my $from (keys %rename) {
+                my $to = $rename{$from};
+
+                use Storable; # we need to do evil evil things to rename!
+                use Sub::Delete; # seriously, just don't look here!
+
+                local $Storable::Deparse = 1;
+                local $Storable::Eval = 1;
+
+                *{ "$tmp_pkg\::$to" } = Storable::dclone(\&{ "$tmp_pkg\::$from" });
+
+                delete_sub("$tmp_pkg\::$from");
             }
-
-            $package = $tmp_pkg;
         }
 
-        $package->import::into($target);
+        $tmp_pkg->import::into($target);
     }
 
     $class->_setup_import($features);
@@ -170,6 +186,12 @@ sub _check_for_conflicts {
     my %functions;
     for my $pkg (sort keys %$packages) {
         my $functions_exported_by_pkg = $class->_get_functions_exported_by_package($pkg);
+
+        for my $from (keys %{ $packages->{$pkg}{rename} || {} }) {
+            my $to = $packages->{$pkg}{rename};
+            $functions_exported_by_pkg->{$to} = delete $functions_exported_by_pkg->{$from};
+        }
+
         for my $function (sort keys %$functions_exported_by_pkg) {
             next if (grep { $function eq $_ } @{ $packages->{$pkg}{exclude} || [] });
             push @{ $functions{$function} }, $pkg;
