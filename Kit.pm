@@ -130,7 +130,7 @@ sub import {
 
     my ( $packages, $features ) = $class->_packages_and_features(@_);
 
-    my $target = caller;
+    my $target = $class->_get_callpack();
     foreach my $package ( keys %$packages ) {
         use_module($package)->import::into($target);
     }
