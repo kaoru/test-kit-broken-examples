@@ -3,6 +3,7 @@ package Test::Kit;
 use warnings;
 use strict;
 use Carp ();
+use Exporter ();
 use namespace::clean;
 
 use Import::Into;
@@ -134,7 +135,27 @@ sub import {
 
     my $target = $class->_get_callpack();
     foreach my $package ( keys %$packages ) {
-        use_module($package)->import::into($target);
+        use_module($package);
+
+        if ($packages->{$package}{exclude}) {
+            # create a temporary package that doesn't include the excluded
+            # packages, then import that into our target
+            my $tmp_pkg = "Test::Kit::Temp::Excluded::$package";
+            $package->import::into($tmp_pkg);
+
+            my $functions_exported_by_pkg = $class->_get_functions_exported_by_package($package);
+            my %excluded = map { $_ => 1 } @{ $packages->{$package}{exclude} };
+
+            {
+                no strict 'refs';
+                push @{ "$tmp_pkg\::ISA" }, 'Exporter';
+                @{ "$tmp_pkg\::EXPORT" } = grep { !$excluded{$_} } keys %$functions_exported_by_pkg;
+            }
+
+            $package = $tmp_pkg;
+        }
+
+        $package->import::into($target);
     }
 
     $class->_setup_import($features);
@@ -148,10 +169,9 @@ sub _check_for_conflicts {
 
     my %functions;
     for my $pkg (sort keys %$packages) {
-        my $tmp_pkg = "Test::Kit::Temp::$pkg";
-        use_module($pkg)->import::into($tmp_pkg);
-        my $functions_exported_by_pkg = namespace::clean->get_functions($tmp_pkg);
+        my $functions_exported_by_pkg = $class->_get_functions_exported_by_package($pkg);
         for my $function (sort keys %$functions_exported_by_pkg) {
+            next if (grep { $function eq $_ } @{ $packages->{$pkg}{exclude} || [] });
             push @{ $functions{$function} }, $pkg;
             if (@{ $functions{$function} } > 1) {
                 die "Function &$function exported from more than one package:  ",
@@ -161,6 +181,17 @@ sub _check_for_conflicts {
     }
 
     return;
+}
+
+sub _get_functions_exported_by_package {
+    my $class = shift;
+    my $pkg = shift;
+
+    my $tmp_pkg = "Test::Kit::Temp::ConflictCheck::$pkg";
+    use_module($pkg)->import::into($tmp_pkg);
+    my $functions_exported_by_pkg = namespace::clean->get_functions($tmp_pkg);
+
+    return $functions_exported_by_pkg;
 }
 
 sub _get_callpack {
