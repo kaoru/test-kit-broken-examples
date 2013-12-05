@@ -130,6 +130,8 @@ sub import {
 
     my ( $packages, $features ) = $class->_packages_and_features(@_);
 
+    $class->_check_for_conflicts($packages);
+
     my $target = $class->_get_callpack();
     foreach my $package ( keys %$packages ) {
         use_module($package)->import::into($target);
@@ -138,6 +140,27 @@ sub import {
     $class->_setup_import($features);
 
     return 1;
+}
+
+sub _check_for_conflicts {
+    my $class = shift;
+    my $packages = shift;
+
+    my %functions;
+    for my $pkg (sort keys %$packages) {
+        my $tmp_pkg = "Test::Kit::Temp::$pkg";
+        use_module($pkg)->import::into($tmp_pkg);
+        my $functions_exported_by_pkg = namespace::clean->get_functions($tmp_pkg);
+        for my $function (sort keys %$functions_exported_by_pkg) {
+            push @{ $functions{$function} }, $pkg;
+            if (@{ $functions{$function} } > 1) {
+                die "Function &$function exported from more than one package:  ",
+                    join(", ", @{ $functions{$function} }), "\n";
+            }
+        }
+    }
+
+    return;
 }
 
 sub _get_callpack {
